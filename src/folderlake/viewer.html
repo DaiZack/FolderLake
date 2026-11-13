@@ -15,7 +15,14 @@
   .view-toggle button, .edge-toggles label { cursor:pointer; }
   .view-toggle button { padding:6px 12px; border:1px solid var(--line); background:#fff; border-radius:6px; font-size:13px; }
   .view-toggle button.active { background:var(--ink); color:#fff; border-color:var(--ink); }
-  main { flex:1; display:grid; grid-template-columns:250px minmax(0,1fr) 400px; min-height:0; }
+  main { flex:1; display:grid; grid-template-columns:250px 320px minmax(0,1fr) 380px; min-height:0; }
+  @media (max-width: 1280px) {
+    main { grid-template-columns:230px 280px minmax(0,1fr) 320px; }
+  }
+  @media (min-width: 921px) {
+    /* Desktop shows list and graph side by side — no view toggle. */
+    .view-toggle { display:none; }
+  }
   aside, section { overflow-y:auto; padding:12px 14px; }
   aside { border-right:1px solid var(--line); background:#fff; }
   aside h2, section h2 { font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:14px 0 6px; }
@@ -31,6 +38,8 @@
   .count { color:var(--muted); font-size:12px; }
   .clear-btn { margin-top:10px; padding:5px 10px; font-size:13px; border:1px solid var(--line); background:#fff; border-radius:6px; cursor:pointer; }
   #list-pane { border-right:1px solid var(--line); padding:0; }
+  #graph-pane { border-right:1px solid var(--line); padding:0; display:flex; flex-direction:column; overflow:hidden; background:#fff; }
+  #graph-wrap { flex:1; display:flex; flex-direction:column; min-height:0; padding:8px; }
   #file-list { list-style:none; margin:0; padding:0; }
   #file-list li { padding:10px 14px; border-bottom:1px solid var(--line); cursor:pointer; }
   #file-list li:hover { background:#fafafa; }
@@ -38,8 +47,7 @@
   #file-list .fname { font-size:14px; font-weight:600; word-break:break-all; }
   #file-list .fmeta { font-size:12px; color:var(--muted); margin-top:2px; }
   .tag { display:inline-block; font-size:11px; background:#eef3fb; color:var(--blue); border-radius:10px; padding:1px 8px; margin:2px 2px 0 0; }
-  #graph-wrap { padding:8px; }
-  #graph-chart { width:100%; height:calc(100vh - 215px); }
+  #graph-chart { width:100%; flex:1; min-height:220px; }
   .graph-actions { padding:4px; }
   .graph-actions a { font-size:13px; color:var(--blue); text-decoration:none; border:1px solid var(--line); background:#fff; border-radius:6px; padding:5px 10px; }
   .graph-actions a:hover { border-color:var(--blue); }
@@ -69,9 +77,10 @@
     aside { border-right:none; border-bottom:1px solid var(--line);
             max-height:50vh; overflow-y:auto; }
     #list-pane { border-right:none; }
+    #graph-pane { border-right:none; border-top:1px solid var(--line); }
     #preview-pane { border-top:1px solid var(--line); }
     #preview-pane pre { max-height:60vh; }
-    #graph-chart { height:65vh; }
+    #graph-chart { height:65vh; flex:none; }
   }
 </style>
 </head>
@@ -95,7 +104,9 @@
   </aside>
   <section id="list-pane">
     <ul id="file-list"></ul>
-    <div id="graph-wrap" class="hidden">
+  </section>
+  <section id="graph-pane">
+    <div id="graph-wrap">
       <div class="edge-toggles" id="edge-toggles"></div>
       <div class="graph-actions"><a href="/api/export.cypher" download>Download Cypher (Neo4j)</a></div>
       <div id="edge-info">Drag to pan, scroll to zoom. Click a node to preview it. Click an edge to see why two files are linked.</div>
@@ -109,7 +120,7 @@
 <script src="/assets/echarts.min.js"></script>
 <script>
 const $ = (s) => document.querySelector(s);
-const state = { kinds: new Set(), topic: null, node: null, expanded: new Set(), q: "", view: "list",
+const state = { kinds: new Set(), topic: null, node: null, expanded: new Set(), q: "", view: "graph",
                 files: [], selected: null, graph: null, chart: null, nodeIndex: null,
                 edgeKinds: new Set(["shared_topic", "shared_entity", "reference"]) };
 const KIND_COLORS = { text: "#10b070", document: "#4a80d0", data: "#ed7d31", other: "#999" };
@@ -190,6 +201,7 @@ async function loadFiles() {
      </li>`).join("") || `<li class="placeholder">No files match these filters.</li>`;
   document.querySelectorAll("#file-list li[data-id]").forEach(li =>
     li.addEventListener("click", () => selectFile(li.dataset.id)));
+  if (state.graph) drawGraph();   // the graph mirrors the list's filters
 }
 
 async function selectFile(id) {
@@ -266,13 +278,19 @@ function drawGraph() {
     });
     window.addEventListener("resize", () => state.chart && state.chart.resize());
   }
-  const kindNames = [...new Set(g.nodes.map(n => n.kind))];
+  // The graph shows exactly the files the list shows: topic, kind,
+  // topic-tree and search filters apply to both.
+  const visibleIds = new Set(state.files.map(f => f.id));
+  const visNodes = g.nodes.filter(n => visibleIds.has(n.id));
+  const visIds = new Set(visNodes.map(n => n.id));
+  const visEdges = g.edges.filter(e => visIds.has(e.a) && visIds.has(e.b));
+  const kindNames = [...new Set(visNodes.map(n => n.kind))];
   const categories = kindNames.map(k => ({ name: k, itemStyle: { color: KIND_COLORS[k] || "#999" } }));
   const degree = {};
-  g.edges.forEach(e => { degree[e.a] = (degree[e.a] || 0) + 1; degree[e.b] = (degree[e.b] || 0) + 1; });
-  const bigN = g.nodes.length > 120;
+  visEdges.forEach(e => { degree[e.a] = (degree[e.a] || 0) + 1; degree[e.b] = (degree[e.b] || 0) + 1; });
+  const bigN = visNodes.length > 120;
   state.nodeIndex = {};
-  const nodes = g.nodes.map((n, i) => {
+  const nodes = visNodes.map((n, i) => {
     state.nodeIndex[n.id] = i;
     return {
       id: n.id, name: n.name.length > 24 ? n.name.slice(0, 23) + "…" : n.name,
@@ -283,11 +301,11 @@ function drawGraph() {
       itemStyle: { color: KIND_COLORS[n.kind] || "#999" },
     };
   });
-  const links = g.edges.filter(e => state.edgeKinds.has(e.kind)).map(e => ({
+  const links = visEdges.filter(e => state.edgeKinds.has(e.kind)).map(e => ({
     source: e.a, target: e.b, edgeKind: e.kind, detail: e.detail,
     lineStyle: { color: EDGE_COLORS[e.kind] || "#bbb", type: e.kind === "same_folder" ? "dashed" : "solid", opacity: 0.75 },
   }));
-  const big = g.nodes.length > 250;
+  const big = visNodes.length > 250;
   state.chart.setOption({
     tooltip: {
       formatter: (p) => {
@@ -308,9 +326,9 @@ function drawGraph() {
       label: { show: !big, position: "bottom", fontSize: 11,
                formatter: (p) => p.data.name },
       labelLayout: { hideOverlap: true },
-      zoom: g.nodes.length > 150 ? 0.55 : g.nodes.length > 60 ? 0.8 : 1.05,
+      zoom: visNodes.length > 150 ? 0.55 : visNodes.length > 60 ? 0.8 : 1.05,
       force: {
-        repulsion: g.nodes.length > 300 ? 90 : 200,
+        repulsion: visNodes.length > 300 ? 90 : 200,
         edgeLength: [50, 150], gravity: 0.06, friction: 0.15,
         layoutAnimation: true,
       },
@@ -325,13 +343,24 @@ function setView(v) {
   state.view = v;
   $("#btn-list").classList.toggle("active", v === "list");
   $("#btn-graph").classList.toggle("active", v === "graph");
-  $("#file-list").classList.toggle("hidden", v !== "list");
-  $("#graph-wrap").classList.toggle("hidden", v !== "graph");
-  if (v === "graph") { loadGraph(); if (state.chart) setTimeout(() => state.chart.resize(), 50); }
+  // Desktop shows the list and the graph side by side; the toggle only
+  // switches panes on narrow (mobile) layouts. Graph is the default.
+  const mobile = window.innerWidth <= 920;
+  $("#list-pane").classList.toggle("hidden", mobile && v !== "list");
+  $("#graph-pane").classList.toggle("hidden", mobile && v !== "graph");
+  if (!mobile || v === "graph") {
+    loadGraph();
+    if (state.chart) setTimeout(() => state.chart.resize(), 50);
+  }
 }
 
 $("#btn-list").addEventListener("click", () => setView("list"));
 $("#btn-graph").addEventListener("click", () => setView("graph"));
+let wasMobile = window.innerWidth <= 920;
+window.addEventListener("resize", () => {
+  const m = window.innerWidth <= 920;
+  if (m !== wasMobile) { wasMobile = m; setView(state.view); }
+});
 let searchTimer;
 $("#search").addEventListener("input", (e) => {
   clearTimeout(searchTimer);
@@ -343,6 +372,7 @@ $("#search").addEventListener("input", (e) => {
   $("#folder-label").textContent = meta.folder + ` — ${meta.catalog_bytes ? (meta.catalog_bytes / 1024).toFixed(0) + " KB catalog" : ""}`;
   await loadFacets();
   await loadFiles();
+  setView(state.view);
 })();
 </script>
 </body>

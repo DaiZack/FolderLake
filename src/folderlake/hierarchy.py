@@ -144,7 +144,19 @@ def _label(cluster: _Cluster, corpus_total: dict[str, float],
             ranked.append((term, value * lift * _term_bonus(term)))
     ranked.sort(key=lambda kv: -kv[1])
     top = _select_tags(ranked, Counter(cluster.total), limit=3)
-    return " · ".join(t for t, _ in top) or "misc"
+    # Display polish: a bare "sex" (the dataset column) reads as a
+    # content warning in a topic label. If the other picked terms or
+    # the runners-up can carry the label, drop it; keep it only when
+    # nothing else is available.
+    picked = [t for t, _ in top]
+    if "sex" in picked and len(picked) > 1:
+        picked = [t for t in picked if t != "sex"]
+        for t, _ in ranked:
+            if len(picked) >= 3:
+                break
+            if t not in picked and t != "sex":
+                picked.append(t)
+    return " · ".join(picked) or "misc"
 
 
 def _should_flatten(cluster: _Cluster) -> bool:
