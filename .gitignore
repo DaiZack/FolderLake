@@ -1,0 +1,19 @@
+# Catalogs are generated per folder, never committed
+*.duckdb
+*.duckdb.wal
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
+# Local research / scratch (not part of the product)
+.proto2/
+pwtest/
+cluster-*.md
+screenshots/

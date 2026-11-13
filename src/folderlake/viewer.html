@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FolderLake</title>
+<style>
+  :root { --bg:#f4f4f4; --ink:#111; --muted:#666; --line:#ddd; --accent:#ed7d31; --blue:#4a80d0; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",sans-serif; background:var(--bg); color:var(--ink); height:100vh; display:flex; flex-direction:column; }
+  header { display:flex; gap:12px; align-items:center; padding:10px 16px; border-bottom:1px solid var(--line); background:#fff; }
+  header h1 { font-size:18px; margin:0; }
+  header .folder { color:var(--muted); font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  header input[type=search] { margin-left:auto; padding:6px 10px; font-size:14px; width:280px; border:1px solid var(--line); border-radius:6px; }
+  .view-toggle button, .edge-toggles label { cursor:pointer; }
+  .view-toggle button { padding:6px 12px; border:1px solid var(--line); background:#fff; border-radius:6px; font-size:13px; }
+  .view-toggle button.active { background:var(--ink); color:#fff; border-color:var(--ink); }
+  main { flex:1; display:grid; grid-template-columns:250px minmax(0,1fr) 400px; min-height:0; }
+  aside, section { overflow-y:auto; padding:12px 14px; }
+  aside { border-right:1px solid var(--line); background:#fff; }
+  aside h2, section h2 { font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:14px 0 6px; }
+  aside h2:first-child { margin-top:0; }
+  .kind-row, .topic-row { display:flex; justify-content:space-between; gap:8px; padding:3px 0; font-size:14px; cursor:pointer; }
+  .topic-row.active { font-weight:700; color:var(--accent); }
+  .tree-row { display:flex; justify-content:space-between; gap:8px; padding:3px 0; font-size:14px; cursor:pointer; align-items:baseline; }
+  .tree-row.active { font-weight:700; color:var(--accent); }
+  .tree-row .tbody { flex:1; min-width:0; display:flex; align-items:baseline; }
+  .tree-row .tlabel { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .tree-row .count { flex:none; }
+  .tree-toggle { display:inline-block; width:14px; color:var(--muted); cursor:pointer; flex:none; }
+  .count { color:var(--muted); font-size:12px; }
+  .clear-btn { margin-top:10px; padding:5px 10px; font-size:13px; border:1px solid var(--line); background:#fff; border-radius:6px; cursor:pointer; }
+  #list-pane { border-right:1px solid var(--line); padding:0; }
+  #file-list { list-style:none; margin:0; padding:0; }
+  #file-list li { padding:10px 14px; border-bottom:1px solid var(--line); cursor:pointer; }
+  #file-list li:hover { background:#fafafa; }
+  #file-list li.selected { background:#fff3e8; border-left:3px solid var(--accent); }
+  #file-list .fname { font-size:14px; font-weight:600; word-break:break-all; }
+  #file-list .fmeta { font-size:12px; color:var(--muted); margin-top:2px; }
+  .tag { display:inline-block; font-size:11px; background:#eef3fb; color:var(--blue); border-radius:10px; padding:1px 8px; margin:2px 2px 0 0; }
+  #graph-wrap { padding:8px; }
+  #graph-chart { width:100%; height:calc(100vh - 215px); }
+  .graph-actions { padding:4px; }
+  .graph-actions a { font-size:13px; color:var(--blue); text-decoration:none; border:1px solid var(--line); background:#fff; border-radius:6px; padding:5px 10px; }
+  .graph-actions a:hover { border-color:var(--blue); }
+  #edge-info { font-size:13px; color:var(--muted); padding:6px 4px; min-height:30px; }
+  .edge-toggles { font-size:13px; display:flex; gap:12px; flex-wrap:wrap; padding:4px; }
+  #preview-pane { background:#fff; }
+  #preview-pane h2 { font-size:16px; text-transform:none; letter-spacing:0; color:var(--ink); margin:0 0 4px; word-break:break-all; }
+  #preview-pane .meta { font-size:12px; color:var(--muted); line-height:1.6; word-break:break-all; }
+  #preview-pane .summary { font-size:14px; line-height:1.5; margin:12px 0; }
+  #preview-pane pre { white-space:pre-wrap; word-break:break-word; font-size:13px; line-height:1.5; background:var(--bg); padding:10px; border-radius:6px; max-height:45vh; overflow-y:auto; }
+  #preview-pane table { border-collapse:collapse; font-size:13px; margin:8px 0; }
+  #preview-pane th, #preview-pane td { border:1px solid var(--line); padding:4px 8px; text-align:left; }
+  #preview-pane code { font-size:12px; background:var(--bg); padding:2px 6px; border-radius:4px; word-break:break-all; }
+  .copy-btn { padding:4px 10px; font-size:12px; border:1px solid var(--line); background:#fff; border-radius:6px; cursor:pointer; margin-left:6px; }
+  .placeholder { color:var(--muted); font-size:14px; margin-top:40px; text-align:center; }
+  .hidden { display:none !important; }
+  /* Small screens: the desktop layout is three fixed columns
+     (250px + fluid + 400px) which cannot fit a phone — the file list
+     collapses to zero width. Stack the panes vertically instead. */
+  @media (max-width: 920px) {
+    body { height:auto; }
+    header { flex-wrap:wrap; }
+    header .folder { flex:1; min-width:0; }
+    header input[type=search] { order:4; width:100%; margin-left:0; }
+    main { display:flex; flex-direction:column; }
+    aside, section { overflow:visible; }
+    aside { border-right:none; border-bottom:1px solid var(--line);
+            max-height:50vh; overflow-y:auto; }
+    #list-pane { border-right:none; }
+    #preview-pane { border-top:1px solid var(--line); }
+    #preview-pane pre { max-height:60vh; }
+    #graph-chart { height:65vh; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>FolderLake</h1>
+  <span class="folder" id="folder-label"></span>
+  <input type="search" id="search" placeholder="Search files… (name, summary, text)">
+  <div class="view-toggle">
+    <button id="btn-list" class="active">List</button>
+    <button id="btn-graph">Graph</button>
+  </div>
+</header>
+<main>
+  <aside id="filters">
+    <h2>Type</h2>
+    <div id="kind-filters"></div>
+    <h2>Topics</h2>
+    <div id="topic-filters"></div>
+    <button class="clear-btn" id="clear-filters">Clear filters</button>
+  </aside>
+  <section id="list-pane">
+    <ul id="file-list"></ul>
+    <div id="graph-wrap" class="hidden">
+      <div class="edge-toggles" id="edge-toggles"></div>
+      <div class="graph-actions"><a href="/api/export.cypher" download>Download Cypher (Neo4j)</a></div>
+      <div id="edge-info">Drag to pan, scroll to zoom. Click a node to preview it. Click an edge to see why two files are linked.</div>
+      <div id="graph-chart"></div>
+    </div>
+  </section>
+  <section id="preview-pane">
+    <p class="placeholder">Select a file to preview it here.</p>
+  </section>
+</main>
+<script src="/assets/echarts.min.js"></script>
+<script>
+const $ = (s) => document.querySelector(s);
+const state = { kinds: new Set(), topic: null, node: null, expanded: new Set(), q: "", view: "list",
+                files: [], selected: null, graph: null, chart: null, nodeIndex: null,
+                edgeKinds: new Set(["shared_topic", "shared_entity", "reference"]) };
+const KIND_COLORS = { text: "#10b070", document: "#4a80d0", data: "#ed7d31", other: "#999" };
+const EDGE_COLORS = { shared_topic: "#4a80d0", shared_entity: "#10b070", reference: "#ed7d31", same_folder: "#ccc" };
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const fmtSize = (n) => n < 1024 ? n + " B" : n < 1048576 ? (n / 1024).toFixed(1) + " KB" : (n / 1048576).toFixed(2) + " MB";
+const fmtDate = (t) => t ? new Date(t * 1000).toLocaleDateString() : "";
+
+async function api(path) { const r = await fetch(path); if (!r.ok) throw new Error(await r.text()); return r.json(); }
+
+function renderTopicTree(roots) {
+  const rows = [];
+  const walk = (node) => {
+    const hasKids = node.children && node.children.length > 0;
+    const open = state.expanded.has(node.id);
+    rows.push(`<div class="tree-row ${state.node === node.id ? "active" : ""}" data-node="${esc(node.id)}" title="${esc(node.label)}" style="padding-left:${node.depth * 14}px">` +
+      `<span class="tbody"><span class="tree-toggle" data-toggle="${esc(node.id)}">${hasKids ? (open ? "▾" : "▸") : "·"}</span><span class="tlabel">${esc(node.label)}</span></span>` +
+      `<span class="count">${node.count}</span></div>`);
+    if (hasKids && open) node.children.forEach(walk);
+  };
+  roots.forEach(walk);
+  $("#topic-filters").innerHTML = rows.join("");
+  document.querySelectorAll(".tree-toggle").forEach(tg => tg.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    const id = tg.dataset.toggle;
+    state.expanded.has(id) ? state.expanded.delete(id) : state.expanded.add(id);
+    renderTopicTree(roots);
+  }));
+  document.querySelectorAll(".tree-row").forEach(row => row.addEventListener("click", () => {
+    state.node = state.node === row.dataset.node ? null : row.dataset.node;
+    renderTopicTree(roots);
+    loadFiles();
+  }));
+}
+
+async function loadFacets() {
+  const f = await api("/api/facets");
+  $("#kind-filters").innerHTML = f.kinds.map(k =>
+    `<label class="kind-row"><span><input type="checkbox" data-kind="${esc(k.kind)}"> ${esc(k.kind)}</span><span class="count">${k.count}</span></label>`).join("");
+  document.querySelectorAll("#kind-filters input").forEach(cb => cb.addEventListener("change", () => {
+    cb.checked ? state.kinds.add(cb.dataset.kind) : state.kinds.delete(cb.dataset.kind);
+    loadFiles();
+  }));
+  let tree = { roots: [] };
+  try { tree = await api("/api/topics"); } catch (e) { /* older catalog */ }
+  if (tree.roots && tree.roots.length) {
+    tree.roots.forEach(r => state.expanded.add(r.id));
+    renderTopicTree(tree.roots);
+  } else {
+    $("#topic-filters").innerHTML = f.topics.map(t =>
+      `<div class="topic-row" data-topic="${esc(t.tag)}"><span>${esc(t.tag)}</span><span class="count">${t.count}</span></div>`).join("");
+    document.querySelectorAll(".topic-row").forEach(row => row.addEventListener("click", () => {
+      state.topic = state.topic === row.dataset.topic ? null : row.dataset.topic;
+      document.querySelectorAll(".topic-row").forEach(r => r.classList.toggle("active", r.dataset.topic === state.topic));
+      loadFiles();
+    }));
+  }
+  $("#clear-filters").addEventListener("click", () => {
+    state.kinds.clear(); state.topic = null; state.node = null; state.q = ""; $("#search").value = "";
+    document.querySelectorAll("#kind-filters input").forEach(cb => cb.checked = false);
+    document.querySelectorAll(".topic-row").forEach(r => r.classList.remove("active"));
+    loadFacets().then(loadFiles);
+  });
+}
+
+async function loadFiles() {
+  const p = new URLSearchParams();
+  if (state.kinds.size) p.set("kind", [...state.kinds].join(","));
+  if (state.topic) p.set("topic", state.topic);
+  if (state.node) p.set("node", state.node);
+  if (state.q) p.set("q", state.q);
+  state.files = await api("/api/files?" + p.toString());
+  $("#file-list").innerHTML = state.files.map(f =>
+    `<li data-id="${f.id}" class="${f.id === state.selected ? "selected" : ""}">
+       <div class="fname">${esc(f.name)}</div>
+       <div class="fmeta">${esc(f.kind)} · ${fmtSize(f.size_bytes)} · ${fmtDate(f.mtime)}</div>
+       <div>${f.tags.map(t => `<span class="tag">${esc(t)}</span>`).join("")}</div>
+     </li>`).join("") || `<li class="placeholder">No files match these filters.</li>`;
+  document.querySelectorAll("#file-list li[data-id]").forEach(li =>
+    li.addEventListener("click", () => selectFile(li.dataset.id)));
+}
+
+async function selectFile(id) {
+  state.selected = id;
+  document.querySelectorAll("#file-list li").forEach(li => li.classList.toggle("selected", li.dataset.id === id));
+  const d = await api("/api/file/" + encodeURIComponent(id));
+  const pane = $("#preview-pane");
+  let h = `<h2>${esc(d.name)}</h2>
+    <div class="meta">${esc(d.kind)} · ${fmtSize(d.size_bytes)} · modified ${fmtDate(d.mtime)}<br>${esc(d.path)}</div>
+    ${d.title ? `<div class="meta">Title: ${esc(d.title)}</div>` : ""}
+    ${d.author ? `<div class="meta">Author: ${esc(d.author)}</div>` : ""}
+    <div>${d.tags.map(t => `<span class="tag">${esc(t)}</span>`).join("")}</div>
+    ${d.summary ? `<p class="summary">${esc(d.summary)}</p>` : ""}
+    ${d.entities && d.entities.length ? `<div class="meta">Entities: ${d.entities.map(esc).join(", ")}</div>` : ""}`;
+  if (d.data_review) {
+    const r = d.data_review;
+    const summ = Object.fromEntries((r.summarize || []).map(s => [s.name, s]));
+    const hasSumm = (r.summarize || []).length > 0;
+    h += `<h2>Data review</h2>
+      <div class="meta">${r.row_count != null ? r.row_count + " rows · " : ""}${r.columns.length} columns</div>
+      <table><tr><th>column</th><th>type</th><th>nulls</th>${hasSumm ? "<th>min</th><th>max</th><th>unique≈</th>" : ""}</tr>${r.columns.map(c => { const s = summ[c.name] || {}; return `<tr><td>${esc(c.name)}</td><td>${esc(c.type || "")}</td><td>${r.nulls[c.name] ?? ""}</td>${hasSumm ? `<td>${esc(s.min ?? "")}</td><td>${esc(s.max ?? "")}</td><td>${esc(s.approx_unique ?? "")}</td>` : ""}</tr>`; }).join("")}</table>
+      <div><code id="sample-query">${esc(r.sample_query)}</code><button class="copy-btn" id="copy-query">Copy</button></div>`;
+  } else if (d.text_preview) {
+    h += `<h2>Preview</h2><pre>${esc(d.text_preview)}</pre>`;
+  }
+  if (d.relations && d.relations.length) {
+    const names = Object.fromEntries(state.files.map(f => [f.id, f.name]));
+    h += `<h2>Linked files</h2>` + d.relations.slice(0, 10).map(rel =>
+      `<div class="meta">${esc(rel.kind)} — ${esc(rel.detail)} — ${esc(names[rel.other_id] || rel.other_id)}</div>`).join("");
+  }
+  pane.innerHTML = h;
+  const copy = $("#copy-query");
+  if (copy) copy.addEventListener("click", () => navigator.clipboard.writeText($("#sample-query").textContent));
+  if (state.view === "graph") highlightSelected();
+  // Stacked (mobile) layout: the preview sits below the list, so
+  // bring it into view after a tap.
+  if (window.innerWidth <= 920) pane.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+async function loadGraph() {
+  if (!state.graph) state.graph = await api("/api/graph");
+  const kinds = ["shared_topic", "shared_entity", "reference", "same_folder"];
+  $("#edge-toggles").innerHTML = kinds.map(k =>
+    `<label><input type="checkbox" data-edge="${k}" ${state.edgeKinds.has(k) ? "checked" : ""}> ${k.replace("_", " ")}</label>`).join("");
+  document.querySelectorAll("#edge-toggles input").forEach(cb => cb.addEventListener("change", () => {
+    cb.checked ? state.edgeKinds.add(cb.dataset.edge) : state.edgeKinds.delete(cb.dataset.edge);
+    drawGraph();
+  }));
+  drawGraph();
+}
+
+function highlightSelected() {
+  if (!state.chart || !state.nodeIndex) return;
+  const idx = state.nodeIndex[state.selected];
+  if (idx == null) return;
+  state.chart.dispatchAction({ type: "select", seriesIndex: 0, dataIndex: idx });
+}
+
+function drawGraph() {
+  const g = state.graph; if (!g) return;
+  if (typeof echarts === "undefined") {
+    $("#edge-info").textContent = "ECharts failed to load — graph unavailable.";
+    return;
+  }
+  if (!state.chart) {
+    state.chart = echarts.init($("#graph-chart"));
+    state.chart.on("click", (params) => {
+      if (params.dataType === "node") selectFile(params.data.id);
+      else if (params.dataType === "edge") {
+        const names = Object.fromEntries(state.graph.nodes.map(n => [n.id, n.name]));
+        $("#edge-info").textContent =
+          `${names[params.data.source]} — ${names[params.data.target]}: ${params.data.edgeKind} (${params.data.detail})`;
+      }
+    });
+    window.addEventListener("resize", () => state.chart && state.chart.resize());
+  }
+  const kindNames = [...new Set(g.nodes.map(n => n.kind))];
+  const categories = kindNames.map(k => ({ name: k, itemStyle: { color: KIND_COLORS[k] || "#999" } }));
+  const degree = {};
+  g.edges.forEach(e => { degree[e.a] = (degree[e.a] || 0) + 1; degree[e.b] = (degree[e.b] || 0) + 1; });
+  const bigN = g.nodes.length > 120;
+  state.nodeIndex = {};
+  const nodes = g.nodes.map((n, i) => {
+    state.nodeIndex[n.id] = i;
+    return {
+      id: n.id, name: n.name.length > 24 ? n.name.slice(0, 23) + "…" : n.name,
+      fullName: n.name, kind: n.kind, tags: n.tags || [],
+      category: kindNames.indexOf(n.kind),
+      symbolSize: bigN ? Math.min(22, 8 + (degree[n.id] || 0) * 0.8)
+                       : Math.min(34, 12 + (degree[n.id] || 0) * 1.6),
+      itemStyle: { color: KIND_COLORS[n.kind] || "#999" },
+    };
+  });
+  const links = g.edges.filter(e => state.edgeKinds.has(e.kind)).map(e => ({
+    source: e.a, target: e.b, edgeKind: e.kind, detail: e.detail,
+    lineStyle: { color: EDGE_COLORS[e.kind] || "#bbb", type: e.kind === "same_folder" ? "dashed" : "solid", opacity: 0.75 },
+  }));
+  const big = g.nodes.length > 250;
+  state.chart.setOption({
+    tooltip: {
+      formatter: (p) => {
+        if (p.dataType === "node")
+          return `${esc(p.data.fullName)}<br/>${esc(p.data.kind)}` +
+                 (p.data.tags.length ? `<br/>${p.data.tags.map(esc).join(", ")}` : "");
+        if (p.dataType === "edge") return `${esc(p.data.edgeKind)}: ${esc(p.data.detail)}`;
+        return "";
+      },
+    },
+    legend: [{ data: kindNames, top: 4, left: 8 }],
+    series: [{
+      type: "graph", layout: "force", roam: true, draggable: true,
+      categories, data: nodes, links,
+      selectedMode: "single",
+      select: { itemStyle: { borderColor: "#111", borderWidth: 3 } },
+      emphasis: { focus: "adjacency", lineStyle: { width: 3 } },
+      label: { show: !big, position: "bottom", fontSize: 11,
+               formatter: (p) => p.data.name },
+      labelLayout: { hideOverlap: true },
+      zoom: g.nodes.length > 150 ? 0.55 : g.nodes.length > 60 ? 0.8 : 1.05,
+      force: {
+        repulsion: g.nodes.length > 300 ? 90 : 200,
+        edgeLength: [50, 150], gravity: 0.06, friction: 0.15,
+        layoutAnimation: true,
+      },
+      lineStyle: { curveness: 0.08 },
+    }],
+  }, true);
+  highlightSelected();
+  state.chart.resize();
+}
+
+function setView(v) {
+  state.view = v;
+  $("#btn-list").classList.toggle("active", v === "list");
+  $("#btn-graph").classList.toggle("active", v === "graph");
+  $("#file-list").classList.toggle("hidden", v !== "list");
+  $("#graph-wrap").classList.toggle("hidden", v !== "graph");
+  if (v === "graph") { loadGraph(); if (state.chart) setTimeout(() => state.chart.resize(), 50); }
+}
+
+$("#btn-list").addEventListener("click", () => setView("list"));
+$("#btn-graph").addEventListener("click", () => setView("graph"));
+let searchTimer;
+$("#search").addEventListener("input", (e) => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => { state.q = e.target.value.trim(); loadFiles(); }, 250);
+});
+
+(async () => {
+  const meta = await api("/api/meta");
+  $("#folder-label").textContent = meta.folder + ` — ${meta.catalog_bytes ? (meta.catalog_bytes / 1024).toFixed(0) + " KB catalog" : ""}`;
+  await loadFacets();
+  await loadFiles();
+})();
+</script>
+</body>
+</html>
