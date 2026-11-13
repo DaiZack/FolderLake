@@ -271,6 +271,26 @@ pytest                            # 59 tests
 
 Demo data: see [Demo data](#demo-data) above.
 
+## A personal note
+
+FolderLake started as a look back. Years have passed since I first
+found my way into data and machine learning at Brock, and building
+this small tool brought much of it back. I made it for three reasons:
+to revisit the fundamentals I learned then — TF-IDF, clustering,
+graph thinking — and find they still hold up; to explore what today's
+AI can really do when it has to land inside a working product rather
+than a demo notebook; and, I hope, to encourage Brock students now
+walking the same path — the basics compound, and one day they turn
+into things you can ship.
+
+My thanks to:
+
+- **Dr. Anteneh Ayanso**, my mentor at Brock, who first led me into
+  machine learning.
+- **Dr. Shuai Yuan**, with whom I shared Brock coursework.
+- **Bob Lytle**, my former boss, who taught me Neo4j and my first
+  steps in Linux.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
