@@ -1,0 +1,11 @@
+.git
+.github
+.venv
+dist
+build
+__pycache__
+*.duckdb
+.proto2
+screenshots
+pwtest
+folderlake-pages

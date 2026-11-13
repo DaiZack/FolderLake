@@ -42,12 +42,23 @@ FolderLake adds a *reference* link whenever a text names a dataset's
 subject (a capitalised mention like "Titanic" or "Penguins"), on top
 of shared topics, shared entities and explicit filename references.
 
-![List and relationship graph on one page — the graph is the default view, list and graph side by side](docs/screenshots/demo.png)
+![List and relationship graph on one page — the graph is the default view, list and graph side by side](docs/screenshots/topics-tree.png)
+
+![A topic selected in the tree filters the list and the graph together](docs/screenshots/graph.png)
+
+![File preview with data review](docs/screenshots/file-preview.png)
+
+<img src="docs/screenshots/mobile.png" alt="FolderLake on a phone" width="320">
 
 ## Quick start
 
 ```bash
 pip install folderlake            # from PyPI (or: pip install -e . from a clone)
+
+**No Python?** Grab the single-file app from
+[GitHub Releases](https://github.com/DaiZack/FolderLake/releases) —
+`FolderLake.exe` (Windows) or `FolderLake-macOS.zip` — double-click,
+your browser opens the home page. Nothing to install.
 
 folderlake app                    # opens the FolderLake home page
 ```
@@ -84,6 +95,20 @@ folderlake cypher ~/Documents/notes       # export the graph as Neo4j Cypher
 
 Every command is incremental: unchanged files are skipped by file stats
 alone, so re-running on a big folder is cheap.
+
+## Run it as a server (Docker)
+
+For a headless box, Docker Compose is the tidy route — one port,
+and the folders to catalogue are bind-mounted in:
+
+```bash
+docker compose up -d        # → http://localhost:8770
+```
+
+Put folders under `./data` (they appear in the app as `/data/…`).
+Each catalog file is written into its scanned folder, so it persists
+on the host; a named volume keeps the registry (history + settings).
+See [`docker-compose.yml`](docker-compose.yml).
 
 ## Using an LLM for topics
 

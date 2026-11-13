@@ -1,0 +1,20 @@
+# FolderLake as a headless server.
+#
+#   docker compose up -d        →  http://localhost:8770
+#
+# Put the folders you want to catalogue under ./data (or change the
+# mount): inside the app they appear as /data/<folder>. The catalog
+# file (folderlake.duckdb) is written into each scanned folder, so it
+# persists on the host with your files. The registry volume keeps the
+# home-page history and settings across rebuilds.
+services:
+  folderlake:
+    build: .
+    ports:
+      - "8770:8770"
+    volumes:
+      - ./data:/data
+      - folderlake-registry:/root/.folderlake
+
+volumes:
+  folderlake-registry:

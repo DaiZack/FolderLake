@@ -174,10 +174,15 @@ class App:
             "title='Choose a folder for FolderLake'))\n"
             "root.destroy()\n"
         )
+        if getattr(sys, "frozen", False):
+            # Frozen (PyInstaller) build: sys.executable is the app
+            # itself; it has a hidden --fl-browse mode for this.
+            cmd = [sys.executable, "--fl-browse"]
+        else:
+            cmd = [sys.executable, "-c", code]
         try:
             out = subprocess.run(
-                [sys.executable, "-c", code], capture_output=True,
-                text=True, timeout=600)
+                cmd, capture_output=True, text=True, timeout=600)
             return out.stdout.strip().splitlines()[-1] if out.stdout.strip() else ""
         except Exception:
             return ""
