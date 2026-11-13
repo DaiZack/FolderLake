@@ -14,6 +14,6 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install (with LLM and MCP extras)
-        run: pip install -e ".[llm,mcp]"
+        run: pip install -e ".[llm,mcp]" pytest
       - name: Run tests
         run: pytest -q
