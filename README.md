@@ -46,14 +46,15 @@ of shared topics, shared entities and explicit filename references.
 
 ## Quick start
 
-```bash
-pip install folderlake            # from PyPI (or: pip install -e . from a clone)
-
 **No Python?** Grab the single-file app from
 [GitHub Releases](https://github.com/DaiZack/FolderLake/releases) —
 `FolderLake.exe` (Windows) or `FolderLake-macOS.zip` — double-click,
 your browser opens the home page. Nothing to install.
 
+With Python:
+
+```bash
+pip install folderlake            # from PyPI (or: pip install -e . from a clone)
 folderlake app                    # opens the FolderLake home page
 ```
 
