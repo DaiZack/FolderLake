@@ -1,0 +1,56 @@
+name: Desktop builds
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install app and PyInstaller
+        run: pip install . pyinstaller
+      - name: Build single-file exe
+        run: pyinstaller packaging/folderlake.spec --distpath dist-app --noconfirm
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FolderLake-windows
+          path: dist-app/FolderLake.exe
+      - name: Attach to the release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist-app/FolderLake.exe
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install app and PyInstaller
+        run: pip install . pyinstaller
+      - name: Build single-file app
+        run: pyinstaller packaging/folderlake.spec --distpath dist-app --noconfirm
+      - name: Zip the app
+        run: ditto -c -k --keepParent dist-app/FolderLake FolderLake-macOS.zip
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FolderLake-macos
+          path: FolderLake-macOS.zip
+      - name: Attach to the release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: FolderLake-macOS.zip
