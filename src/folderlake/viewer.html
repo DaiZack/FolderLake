@@ -108,7 +108,7 @@
   <section id="graph-pane">
     <div id="graph-wrap">
       <div class="edge-toggles" id="edge-toggles"></div>
-      <div class="graph-actions"><a href="/api/export.cypher" download>Download Cypher (Neo4j)</a></div>
+      <div class="graph-actions"><a href="/api/export.cypher" id="cypher-link" download>Download Cypher (Neo4j)</a></div>
       <div id="edge-info">Drag to pan, scroll to zoom. Click a node to preview it. Click an edge to see why two files are linked.</div>
       <div id="graph-chart"></div>
     </div>
@@ -353,6 +353,24 @@ function setView(v) {
     if (state.chart) setTimeout(() => state.chart.resize(), 50);
   }
 }
+
+// Download via fetch + Blob: works against the live server and inside
+// the static demo snapshot, whose API stub answers the same URL (a
+// plain anchor navigation would leave the demo site and 404).
+$("#cypher-link").addEventListener("click", async (e) => {
+  e.preventDefault();
+  try {
+    const r = await fetch("/api/export.cypher");
+    const text = await r.text();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
+    a.download = "folderlake.cypher";
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  } catch (err) {
+    window.location = "/api/export.cypher";
+  }
+});
 
 $("#btn-list").addEventListener("click", () => setView("list"));
 $("#btn-graph").addEventListener("click", () => setView("graph"));
