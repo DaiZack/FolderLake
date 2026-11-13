@@ -1,13 +1,20 @@
 # FolderLake
 
-**Point it at a folder. Know what's in it.**
+**Point it at a folder. Know what's in it — an LLM reads the files,
+and an MCP server lets your other agents query the result.**
 
-FolderLake scans a folder once and builds a local catalog of every file in
-it — topic tags, a one-line summary, key entities, metadata — plus a graph
-of how the files relate to each other. The catalog is a single DuckDB file
-that lives next to your data. No server, no account, nothing leaves your
-machine.
+FolderLake scans a folder once and builds a local catalog of every file
+in it — **LLM topic tags, a one-line summary and key entities per
+file**, plus a graph of how the files relate to each other. The
+catalog is a single DuckDB file that lives next to your data. No
+server, no account, nothing leaves your machine.
 
+- **LLM topics** — plug in a model (Ollama local, OpenAI, Anthropic,
+  any OpenAI-compatible endpoint) for phrase tags and real summaries;
+  a built-in TF-IDF tagger covers folders with no model configured.
+- **MCP built in** — `folderlake-mcp` exposes the catalog to Claude
+  Code, Claude Desktop and other MCP clients: search, browse, inspect
+  and traverse the graph without opening the UI.
 - **Zero setup** — one `pip install`, one command, a web UI opens.
 - **Fast** — 1,000 mixed files scan in ~13 s; rescans only touch new or
   changed files (~0.1 s when nothing changed).
@@ -35,11 +42,11 @@ FolderLake adds a *reference* link whenever a text names a dataset's
 subject (a capitalised mention like "Titanic" or "Penguins"), on top
 of shared topics, shared entities and explicit filename references.
 
-![Topic tree and file list](docs/screenshots/topics-tree.png)
+![List and relationship graph on one page — the graph is the default view, list and graph side by side](docs/screenshots/topics-tree.png)
+
+![A topic selected in the tree filters the list and the graph together](docs/screenshots/graph.png)
 
 ![File preview with data review](docs/screenshots/file-preview.png)
-
-![Relationship graph](docs/screenshots/graph.png)
 
 <img src="docs/screenshots/mobile.png" alt="FolderLake on a phone" width="320">
 
@@ -130,6 +137,52 @@ folderlake mcp ~/Documents/notes          # stdio MCP server
 | Agent access | Official `mcp` Python SDK (optional extra), stdio transport |
 | Tests | pytest — 55 tests covering extractors, topics, relations, hierarchy, server and MCP |
 
+### The ML / NLP pipeline, briefly
+
+- **Tokenization** — English unigrams + word bigrams; Chinese character
+  bigrams/trigrams; data files contribute joined column-name phrases
+  (`total_bill` → "total bill").
+- **Phrase mining** — candidate tags are scored with TF-IDF (smoothed
+  IDF, title/filename boost ×3, phrase-length bonus); a phrase's
+  component words are suppressed so tags read like `car air
+  conditioning`, not `car`, `air`, `conditioning`.
+- **LLM classification** — with a model configured, each file's
+  "hotspot" segments (~10k chars: opening, densest passages, closing)
+  go to the model, which returns structured JSON (tags / summary /
+  entities); results are cached by content hash. Data files are
+  described by schema + profile statistics only — sample values never
+  reach the topic model.
+- **Topic tree** — per-kind agglomerative hierarchical clustering
+  (centroid linkage, cosine over L2-normalized TF-IDF vectors, corpus
+  document-frequency hygiene); node labels are picked by term *lift*
+  against the whole kind, and "forced marriage" nodes whose halves
+  barely resemble each other are flattened away.
+- **Entities** — capitalized-sequence extraction (≥2 mentions) in the
+  rule tier; the model's entity list in the LLM tier.
+- **Embeddings** — deliberately not used anywhere; see
+  [Limitations](#limitations-honestly).
+
+## Demo data
+
+The 193 files in the live demo are public material, assembled to look
+like a real mixed folder:
+
+| Kind | Count | Source |
+|---|---|---|
+| Texts | 130 | Posts sampled from the **20 Newsgroups** corpus, plus **Wikipedia** article excerpts (English and Chinese), as `.txt` |
+| Documents | 33 | **AG News** articles packaged as `.pdf` / `.docx` / `.html`, plus longer Wikipedia articles |
+| Data | 30 | The 10 **seaborn** example datasets (tips, iris, penguins, titanic, diamonds, flights, mpg, planets, exercise, attention), each in 3 formats (CSV / JSON / Parquet or XLSX) |
+
+Two Wikipedia leads — *RMS Titanic* and *Penguin* — are included on
+purpose: they are what the Titanic and penguins datasets are *about*,
+so the demo contains genuine text→data links.
+
+Wikipedia text is CC BY-SA; 20 Newsgroups and AG News are standard
+public research corpora; the seaborn datasets ship with the
+BSD-licensed seaborn library. The corpus itself is not distributed
+with this repository — only the rendered catalog snapshot is
+published, and articles are trimmed to excerpts.
+
 ## How the demo was made
 
 The live demo is a static snapshot of a real catalog, produced like
@@ -143,8 +196,9 @@ this (all steps reproducible from this repo):
    for each file — so the demo exercises the real provider layer,
    prompt packaging, JSON parsing and hash caching, with Muse as the
    model. The scan stats reported `llm: 193, rule: 0`.
-3. The viewer was snapshotted to a single self-contained HTML file,
-   which is what GitHub Pages serves.
+3. The viewer was snapshotted to a single self-contained HTML file
+   (kept in [`demo/`](demo/) in this repo), which GitHub Actions
+   deploys to GitHub Pages on every push that touches it.
 
 To recreate the sample folder from the screenshots in early docs:
 
@@ -184,9 +238,7 @@ pip install -e ".[llm,mcp]"
 pytest                            # 55 tests
 ```
 
-Demo data credits: AG News, 20 Newsgroups, Wikipedia (CC BY-SA) and the
-seaborn example datasets. The demo corpus is not distributed with this
-repository; the Pages demo is a rendered snapshot of it.
+Demo data: see [Demo data](#demo-data) above.
 
 ## License
 
