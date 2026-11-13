@@ -9,6 +9,11 @@ file**, plus a graph of how the files relate to each other. The
 catalog is a single DuckDB file that lives next to your data. No
 server, no account, nothing leaves your machine.
 
+The name is the idea: a data lake leaves raw files where they are
+and lays a queryable catalog over them — FolderLake applies that
+idea to an ordinary folder. Your files are never moved, copied or
+reformatted; the lake is the catalog.
+
 - **LLM topics** — plug in a model (Ollama local, OpenAI, Anthropic,
   any OpenAI-compatible endpoint) for phrase tags and real summaries;
   a built-in TF-IDF tagger covers folders with no model configured.
