@@ -5,6 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "folderlake"
 version = "0.2.0"
+readme = "README.md"
 description = "Point it at a folder. Know what's in it. A local file catalog with topics, metadata and a relationship graph, stored in one DuckDB file."
 requires-python = ">=3.11"
 dependencies = [
