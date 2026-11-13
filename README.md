@@ -42,13 +42,7 @@ FolderLake adds a *reference* link whenever a text names a dataset's
 subject (a capitalised mention like "Titanic" or "Penguins"), on top
 of shared topics, shared entities and explicit filename references.
 
-![List and relationship graph on one page — the graph is the default view, list and graph side by side](docs/screenshots/topics-tree.png)
-
-![A topic selected in the tree filters the list and the graph together](docs/screenshots/graph.png)
-
-![File preview with data review](docs/screenshots/file-preview.png)
-
-<img src="docs/screenshots/mobile.png" alt="FolderLake on a phone" width="320">
+![List and relationship graph on one page — the graph is the default view, list and graph side by side](docs/screenshots/demo.png)
 
 ## Quick start
 
