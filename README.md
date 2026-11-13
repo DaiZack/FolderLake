@@ -68,6 +68,9 @@ page (stored in a small SQLite registry in `~/.folderlake/`): reopen
 one in a click, **Refresh** it to pick up added/removed files, or
 **Delete** it. Each history entry shows the settings it was scanned
 with. Inside a catalog, a **← FolderLake Home** link brings you back.
+Everything runs on a single port — each catalog lives under its own
+`/c/…/` path — so the app works through SSH tunnels, Docker port
+mappings and other single-port forwarding.
 
 The catalog viewer itself: filters and the topic tree on the left,
 the file list and the relationship graph side by side in the middle

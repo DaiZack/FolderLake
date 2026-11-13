@@ -4,9 +4,14 @@
 folder picker, no scan before the page appears. The home page lists
 every catalog built so far (from the SQLite registry), starts new
 scans with live progress, refreshes or deletes old ones, and holds
-the LLM settings. Opening a catalog spins up the ordinary
-single-catalog viewer server (in a thread, on its own port) with a
-"← FolderLake Home" link injected into its header.
+the LLM settings.
+
+Everything is served from this one port: each catalog's viewer lives
+under ``/c/<catalog-id>/`` with its API at ``/c/<catalog-id>/api/…``
+(the viewer HTML is rewritten to the prefix when served). A single
+port keeps the app usable through SSH tunnels, Docker port mappings
+and other one-port forwarding — an earlier design ran each catalog
+viewer on its own random port, which broke exactly there.
 """
 
 from __future__ import annotations
@@ -21,12 +26,13 @@ import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from .catalog import CATALOG_NAME, scan
+from .catalog import CATALOG_NAME, scan, try_build_fts
+from .cypher import build_cypher
 from .hierarchy import build_hierarchy
-from .registry import Registry, catalog_id_for
+from .registry import Registry
 from .relations import build_relations
-from .server import create_server
-from .catalog import try_build_fts
+from .server import (ECHARTS_PATH, VIEWER_PATH, facets, file_detail,
+                     graph, list_files, topics_tree)
 
 HOME_PATH = Path(__file__).with_name("home.html")
 
@@ -38,7 +44,6 @@ class App:
         self.registry = registry or Registry()
         self.jobs: dict[str, dict] = {}
         self._job_lock = threading.Lock()
-        self.viewers: dict[str, tuple[ThreadingHTTPServer, int]] = {}
         handler = type("AppHandler", (_Handler,), {"app": self})
         try:
             self.server = ThreadingHTTPServer((host, port), handler)
@@ -90,11 +95,7 @@ class App:
         return snapshot
 
     def _run_scan(self, job: dict, folder: Path, use_llm: bool) -> None:
-        cid = catalog_id_for(folder)
-        was_open = cid in self.viewers
         try:
-            if was_open:
-                self._stop_viewer(cid)  # DuckDB allows one writer
             snapshot = self._apply_llm_env(use_llm)
             db_path = folder / CATALOG_NAME
 
@@ -114,40 +115,43 @@ class App:
                        catalog_id=rec["id"])
         except Exception as exc:  # surfaced on the home page, not a crash
             job.update(status="error", message=str(exc))
-        finally:
-            if was_open and job["status"] == "done":
-                self.open_catalog(cid)
 
-    # -- catalog viewers ------------------------------------------------
-    def open_catalog(self, catalog_id: str) -> str:
+    # -- catalogs under /c/<id>/ ----------------------------------------
+    def catalog_rec(self, catalog_id: str) -> dict:
         rec = self.registry.get_catalog(catalog_id)
         if rec is None:
             raise KeyError("no such catalog")
-        if catalog_id in self.viewers:
-            _, port = self.viewers[catalog_id]
-            self.registry.touch_opened(catalog_id)
-            return f"http://{self.host}:{port}/"
-        folder = Path(rec["path"])
-        db_path = folder / CATALOG_NAME
-        if not db_path.exists():
-            raise KeyError("catalog file is missing — refresh to rebuild it")
-        server = create_server(db_path, folder, self.host, 0,
-                               home_url=self.home_url)
-        port = server.server_address[1]
-        threading.Thread(target=server.serve_forever, daemon=True).start()
-        self.viewers[catalog_id] = (server, port)
-        self.registry.touch_opened(catalog_id)
-        return f"http://{self.host}:{port}/"
+        return rec
 
-    def _stop_viewer(self, catalog_id: str) -> None:
-        entry = self.viewers.pop(catalog_id, None)
-        if entry is not None:
-            server, _ = entry
-            server.shutdown()
-            server.server_close()
+    def open_catalog(self, catalog_id: str) -> str:
+        rec = self.catalog_rec(catalog_id)
+        if not (Path(rec["path"]) / CATALOG_NAME).exists():
+            raise KeyError("catalog file is missing — refresh to rebuild it")
+        self.registry.touch_opened(catalog_id)
+        return f"/c/{catalog_id}/"
+
+    def catalog_viewer_html(self, catalog_id: str) -> str:
+        """The viewer page with its API/asset paths rewritten to this
+        catalog's prefix, plus the back-to-home link."""
+        rec = self.catalog_rec(catalog_id)
+        if not (Path(rec["path"]) / CATALOG_NAME).exists():
+            raise KeyError("catalog file is missing — refresh to rebuild it")
+        prefix = f"/c/{catalog_id}"
+        page = VIEWER_PATH.read_text(encoding="utf-8")
+        page = page.replace("/api/", prefix + "/api/")
+        page = page.replace("/assets/", prefix + "/assets/")
+        link = (
+            '<a href="/" style="margin-left:auto;margin-right:12px;'
+            'color:#4a80d0;text-decoration:none;font-size:13px;'
+            'white-space:nowrap">← FolderLake Home</a>'
+        )
+        return page.replace("</header>", link + "</header>", 1)
 
     def delete_catalog(self, catalog_id: str) -> dict:
-        self._stop_viewer(catalog_id)
+        running = self.running_job()
+        rec = self.catalog_rec(catalog_id)
+        if running is not None and running["path"] == rec["path"]:
+            raise RuntimeError("a scan is running for this catalog")
         rec = self.registry.delete_catalog(catalog_id)
         if rec is None:
             raise KeyError("no such catalog")
@@ -193,6 +197,16 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _send_bytes(self, body: bytes, content_type: str,
+                    disposition: str | None = None) -> None:
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        if disposition:
+            self.send_header("Content-Disposition", disposition)
+        self.end_headers()
+        self.wfile.write(body)
+
     def _send_html(self, text: str) -> None:
         body = text.encode()
         self.send_response(200)
@@ -210,11 +224,83 @@ class _Handler(BaseHTTPRequestHandler):
         except Exception:
             return {}
 
+    def _serve_catalog(self, parsed) -> None:
+        """GET /c/<id>/… — the catalog viewer and its API, same port."""
+        app = self.app
+        parts = parsed.path.split("/")  # ['', 'c', '<id>', <rest...>]
+        cid = parts[2] if len(parts) > 2 else ""
+        rest = "/".join(parts[3:])
+        try:
+            rec = app.catalog_rec(cid)
+        except KeyError:
+            self._send_json({"error": "no such catalog"}, 404)
+            return
+        db_path = Path(rec["path"]) / CATALOG_NAME
+        query = urllib.parse.parse_qs(parsed.query)
+        try:
+            if rest in ("", "/"):
+                self._send_html(app.catalog_viewer_html(cid))
+                return
+            if rest == "assets/echarts.min.js":
+                if ECHARTS_PATH.exists():
+                    self._send_bytes(
+                        ECHARTS_PATH.read_bytes(),
+                        "application/javascript; charset=utf-8")
+                else:
+                    self._send_json({"error": "echarts asset missing"}, 404)
+                return
+            if rest == "api/export.cypher":
+                self._send_bytes(build_cypher(db_path).encode(),
+                                 "text/plain; charset=utf-8",
+                                 'attachment; filename="folderlake.cypher"')
+                return
+            if rest == "api/meta":
+                self._send_json({
+                    "folder": rec["path"],
+                    "catalog": str(db_path),
+                    "catalog_bytes": (db_path.stat().st_size
+                                      if db_path.exists() else 0),
+                })
+                return
+            if rest == "api/files":
+                kinds = query.get("kind", [None])[0]
+                self._send_json(list_files(
+                    db_path,
+                    kinds=kinds.split(",") if kinds else None,
+                    topic=query.get("topic", [None])[0],
+                    query=query.get("q", [None])[0],
+                    node=query.get("node", [None])[0]))
+                return
+            if rest == "api/facets":
+                self._send_json(facets(db_path))
+                return
+            if rest == "api/topics":
+                self._send_json(topics_tree(db_path))
+                return
+            if rest == "api/graph":
+                self._send_json(graph(db_path))
+                return
+            if rest.startswith("api/file/"):
+                detail = file_detail(
+                    db_path, urllib.parse.unquote(rest[len("api/file/"):]))
+                if detail is None:
+                    self._send_json({"error": "file not found"}, 404)
+                else:
+                    self._send_json(detail)
+                return
+        except KeyError as exc:
+            self._send_json({"error": str(exc)}, 404)
+            return
+        self._send_json({"error": "not found"}, 404)
+
     def do_GET(self):  # noqa: N802 - stdlib name
         parsed = urllib.parse.urlparse(self.path)
         app = self.app
         if parsed.path == "/":
             self._send_html(HOME_PATH.read_text(encoding="utf-8"))
+            return
+        if parsed.path.startswith("/c/"):
+            self._serve_catalog(parsed)
             return
         if parsed.path == "/api/catalogs":
             self._send_json(app.registry.list_catalogs())
@@ -287,6 +373,9 @@ class _Handler(BaseHTTPRequestHandler):
                 return
             except KeyError:
                 self._send_json({"error": "no such catalog"}, 404)
+                return
+            except RuntimeError as exc:
+                self._send_json({"error": str(exc)}, 409)
                 return
         self._send_json({"error": "not found"}, 404)
 

@@ -122,8 +122,17 @@ def test_app_server_flow(tmp_path):
         status, opened = client.call(
             "POST", f"/api/catalogs/{cat['id']}/open")
         assert status == 200
-        viewer = client.get_text(opened["url"])
+        # Same port, path-based: no second server is involved, so the
+        # app works through single-port forwarding (SSH tunnels etc.).
+        assert opened["url"] == f"/c/{cat['id']}/"
+        viewer = client.get_text(client.base + opened["url"])
         assert "FolderLake Home" in viewer  # back-to-home link injected
+        assert f"/c/{cat['id']}/api/" in viewer  # API paths prefixed
+        _, files = client.call("GET", opened["url"] + "api/files")
+        assert len(files) == 2
+        cypher = client.get_text(client.base + opened["url"]
+                                 + "api/export.cypher")
+        assert cypher.startswith("// FolderLake")
 
         # refresh picks up a new file
         (folder / "more.txt").write_text("workshop schedule update",
