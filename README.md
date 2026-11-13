@@ -53,8 +53,7 @@ of shared topics, shared entities and explicit filename references.
 ## Quick start
 
 ```bash
-pip install "git+https://github.com/DaiZack/FolderLake"
-# (not on PyPI yet — GitHub is the source; or `pip install -e .` from a clone)
+pip install folderlake            # from PyPI (or: pip install -e . from a clone)
 
 folderlake app                    # opens the FolderLake home page
 ```
@@ -100,8 +99,7 @@ variables needed; the environment variables below remain for the
 CLI and scripts:
 
 ```bash
-pip install "folderlake[llm] @ git+https://github.com/DaiZack/FolderLake"
-#                                 (adds LiteLLM as the transport)
+pip install "folderlake[llm]"     # adds LiteLLM as the transport
 
 # Local model via Ollama (default provider)
 FOLDERLAKE_LLM_MODEL=qwen3 folderlake scan ~/notes --llm
@@ -132,7 +130,7 @@ client (Claude Code, Cursor, your own agent) can ask questions about a
 catalog without opening files:
 
 ```bash
-pip install "folderlake[mcp] @ git+https://github.com/DaiZack/FolderLake"
+pip install "folderlake[mcp]"
 folderlake mcp ~/Documents/notes          # stdio MCP server
 # or the folderlake-mcp entry point
 ```
