@@ -89,7 +89,11 @@ def _iter_files(root: Path, catalog_path: Path):
         yield path
 
 
-def scan(root: Path, db_path: Path, use_llm: bool = False) -> dict:
+def scan(root: Path, db_path: Path, use_llm: bool = False,
+         progress=None) -> dict:
+    """Scan ``root`` into the catalog. ``progress``, when given, is
+    called as progress(done, total, current_name) while files are
+    walked, so a UI can show a live bar instead of a frozen wait."""
     root = root.resolve()
     con = connect(db_path)
     stats = {"seen": 0, "added": 0, "updated": 0, "skipped": 0, "removed": 0}
@@ -104,7 +108,11 @@ def scan(root: Path, db_path: Path, use_llm: bool = False) -> dict:
         # disk sync per statement and made a 1,000-file scan take ~194s;
         # batched, the same scan is extraction-bound instead.
         con.execute("BEGIN TRANSACTION")
-        for path in _iter_files(root, db_path):
+        paths = list(_iter_files(root, db_path))
+        total = len(paths)
+        for idx, path in enumerate(paths):
+            if progress is not None:
+                progress(idx, total, path.name)
             stats["seen"] += 1
             key = str(path)
             seen_paths.add(key)
@@ -149,6 +157,8 @@ def scan(root: Path, db_path: Path, use_llm: bool = False) -> dict:
                 con.execute(f"DELETE FROM {tbl} WHERE {col} = ?", [fid])
             stats["removed"] += 1
         con.execute("COMMIT")
+        if progress is not None:
+            progress(total, total, "")
         # Post-scan topic pass on the same connection: TF-IDF over
         # stored term counts (no file I/O for unchanged files); the
         # LLM, when enabled, is called only for files added or updated

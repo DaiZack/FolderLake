@@ -207,6 +207,7 @@ def file_detail(db_path: Path, file_id: str) -> dict | None:
 class _Handler(BaseHTTPRequestHandler):
     db_path: Path = Path("folderlake.duckdb")
     folder: Path = Path(".")
+    home_url: str | None = None  # set in app mode: a "back to home" link
 
     def log_message(self, *args):  # keep the console quiet
         pass
@@ -243,7 +244,16 @@ class _Handler(BaseHTTPRequestHandler):
         db_path = self.db_path
 
         if parsed.path == "/":
-            self._send_html(VIEWER_PATH.read_text(encoding="utf-8"))
+            page = VIEWER_PATH.read_text(encoding="utf-8")
+            if self.home_url:
+                link = (
+                    f'<a href="{html.escape(self.home_url)}" '
+                    'style="margin-left:auto;margin-right:12px;color:#4a80d0;'
+                    'text-decoration:none;font-size:13px;white-space:nowrap">'
+                    "← FolderLake Home</a>"
+                )
+                page = page.replace("</header>", link + "</header>", 1)
+            self._send_html(page)
             return
         if parsed.path == "/assets/echarts.min.js":
             if ECHARTS_PATH.exists():
@@ -296,10 +306,11 @@ class _Handler(BaseHTTPRequestHandler):
 
 
 def create_server(db_path: Path, folder: Path, host: str = "127.0.0.1",
-                  port: int = 0) -> ThreadingHTTPServer:
+                  port: int = 0,
+                  home_url: str | None = None) -> ThreadingHTTPServer:
     """Build (but do not start) the viewer server. Port 0 picks a free port."""
     handler = type("FolderLakeHandler", (_Handler,), {
-        "db_path": db_path, "folder": folder,
+        "db_path": db_path, "folder": folder, "home_url": home_url,
     })
     return ThreadingHTTPServer((host, port), handler)
 

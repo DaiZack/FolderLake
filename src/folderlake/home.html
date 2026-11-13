@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FolderLake</title>
+<style>
+  :root { --orange:#ed7d31; --blue:#4a80d0; --ink:#1c1c1c; --muted:#777;
+          --line:#ddd; --bg:#f4f4f4; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;
+         background:var(--bg); color:var(--ink); }
+  .wrap { max-width:880px; margin:0 auto; padding:28px 18px 60px; }
+  header h1 { font-size:30px; margin:0 0 4px; letter-spacing:-.5px; }
+  header p { margin:0 0 22px; color:var(--muted); }
+  .card { background:#fff; border:1px solid var(--line); border-radius:12px;
+          padding:18px 20px; margin-bottom:18px; }
+  .card h2 { font-size:17px; margin:0 0 12px; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  input[type=text], input[type=password], select {
+    font:inherit; padding:9px 11px; border:1px solid var(--line);
+    border-radius:8px; background:#fff; }
+  input.grow { flex:1; min-width:220px; }
+  button { font:inherit; padding:9px 16px; border-radius:8px; cursor:pointer;
+           border:1px solid var(--line); background:#fff; }
+  button.primary { background:var(--orange); border-color:var(--orange);
+                   color:#fff; font-weight:600; }
+  button.danger { background:#d64545; border-color:#d64545; color:#fff; }
+  button:disabled { opacity:.5; cursor:default; }
+  label.check { display:inline-flex; gap:6px; align-items:center; }
+  .muted { color:var(--muted); font-size:13px; }
+  .catalog { border-top:1px solid var(--line); padding:14px 2px; }
+  .catalog:first-of-type { border-top:none; }
+  .catalog .name { font-weight:650; font-size:16px; }
+  .catalog .path { color:var(--muted); font-size:13px; word-break:break-all; }
+  .chips { display:flex; gap:6px; flex-wrap:wrap; margin:6px 0; }
+  .chip { background:#eef3fb; color:#2c5aa0; border-radius:20px;
+          padding:1px 10px; font-size:12.5px; }
+  .chip.rules { background:#f0f0f0; color:#666; }
+  .actions { display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; }
+  .confirm { color:#b03030; font-size:14px; }
+  #job { display:none; }
+  #jobbar { height:10px; background:#eee; border-radius:6px; overflow:hidden;
+            margin:10px 0 6px; }
+  #jobfill { height:100%; width:0%; background:var(--orange);
+             transition:width .3s ease; }
+  .error { color:#b03030; }
+  .ok { color:#1d7a4f; }
+  .grid2 { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
+           gap:10px 16px; }
+  .field label { display:block; font-size:13px; color:var(--muted);
+                 margin-bottom:4px; }
+  .field input, .field select { width:100%; }
+  footer { color:var(--muted); font-size:13px; text-align:center; margin-top:8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>FolderLake</h1>
+    <p>Point it at a folder. Know what's in it. Catalogs live in each
+       folder as <code>folderlake.duckdb</code>; this page remembers them.</p>
+  </header>
+
+  <section class="card">
+    <h2>New catalog</h2>
+    <div class="row">
+      <input type="text" id="path" class="grow"
+             placeholder="Folder path, e.g. /Users/you/Documents/Projects">
+      <button id="browse" type="button">Browse…</button>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <label class="check"><input type="checkbox" id="use-llm">
+        Use LLM for topics</label>
+      <button id="start" class="primary" type="button">Scan folder</button>
+      <span class="muted">A first scan takes a while on big folders —
+        progress shows here, the page never just sits frozen.</span>
+    </div>
+    <div id="job">
+      <div id="jobbar"><div id="jobfill"></div></div>
+      <div id="jobtext" class="muted">Starting…</div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Your catalogs</h2>
+    <div id="catalogs"><p class="muted">Loading…</p></div>
+  </section>
+
+  <section class="card">
+    <h2>Settings</h2>
+    <div class="grid2">
+      <div class="field"><label>LLM provider</label>
+        <select id="s-provider">
+          <option value="ollama">Ollama (local)</option>
+          <option value="openai">OpenAI-compatible</option>
+          <option value="anthropic">Anthropic</option>
+          <option value="huggingface">Hugging Face</option>
+        </select></div>
+      <div class="field"><label>Model (blank = provider default)</label>
+        <input type="text" id="s-model" placeholder="e.g. llama3.1"></div>
+      <div class="field"><label>Base URL (for OpenAI-compatible endpoints)</label>
+        <input type="text" id="s-base" placeholder="https://…/v1"></div>
+      <div class="field"><label>API key</label>
+        <input type="password" id="s-key" placeholder="(not set)"></div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <label class="check"><input type="checkbox" id="s-usellm">
+        Use LLM for topics by default</label>
+      <button id="s-save" type="button">Save settings</button>
+      <span id="s-note" class="muted"></span>
+    </div>
+    <p class="muted">Settings are stored only on this machine, in
+      <code>~/.folderlake/registry.sqlite3</code>. Each catalog's history
+      entry keeps a snapshot of the settings it was scanned with.</p>
+  </section>
+
+  <footer>FolderLake — local-first. Nothing leaves your machine.</footer>
+</div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+let activeJob = null;      // {id, isNew}
+let confirmId = null;      // catalog id currently asking "really delete?"
+let catalogs = [];
+
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || ("HTTP " + r.status));
+  return data;
+}
+const post = (path, body) => api(path, {
+  method: "POST", headers: {"Content-Type": "application/json"},
+  body: JSON.stringify(body || {}) });
+
+function fmtDate(ts) {
+  if (!ts) return "—";
+  return new Date(ts * 1000).toLocaleString([], {month:"short", day:"numeric",
+    hour:"2-digit", minute:"2-digit"});
+}
+function fmtMB(b) {
+  if (!b) return "0 MB";
+  return b >= 1e9 ? (b/1e9).toFixed(1)+" GB"
+       : b >= 1e6 ? (b/1e6).toFixed(1)+" MB" : Math.round(b/1e3)+" KB";
+}
+
+function renderCatalogs() {
+  const box = $("#catalogs");
+  if (!catalogs.length) {
+    box.innerHTML = '<p class="muted">No catalogs yet — scan a folder above ' +
+      'and it will appear here for one-click reopening.</p>';
+    return;
+  }
+  box.innerHTML = "";
+  for (const c of catalogs) {
+    const div = document.createElement("div");
+    div.className = "catalog";
+    const s = c.settings || {};
+    const chip = s.use_llm
+      ? `<span class="chip">LLM · ${escapeHtml(s.llm_provider || "ollama")}${s.llm_model ? " / " + escapeHtml(s.llm_model) : ""}</span>`
+      : '<span class="chip rules">Rule topics (no LLM)</span>';
+    let actions;
+    if (confirmId === c.id) {
+      actions = `<span class="confirm">Delete this catalog? The record and
+        its <code>folderlake.duckdb</code> file are removed; your files stay.</span>
+        <button class="danger" data-act="confirm" data-id="${c.id}">Confirm delete</button>
+        <button data-act="cancel">Cancel</button>`;
+    } else {
+      actions = `<button class="primary" data-act="open" data-id="${c.id}" ${c.exists ? "" : "disabled"}>Open</button>
+        <button data-act="refresh" data-id="${c.id}" ${c.exists ? "" : "disabled"}>Refresh</button>
+        <button data-act="del" data-id="${c.id}">Delete</button>`;
+    }
+    div.innerHTML = `
+      <div class="name">${escapeHtml(c.name)}${c.exists ? "" :
+        ' <span class="error">(folder not found)</span>'}</div>
+      <div class="path">${escapeHtml(c.path)}</div>
+      <div class="chips">${chip}
+        <span class="chip rules">${c.file_count} files · ${fmtMB(c.catalog_bytes)}</span>
+        <span class="chip rules">scanned ${fmtDate(c.updated_at)}</span></div>
+      <div class="actions">${actions}</div>`;
+    box.appendChild(div);
+  }
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (m) => ({"&":"&amp;","<":"&lt;",
+    ">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
+}
+
+$("#catalogs").addEventListener("click", async (e) => {
+  const btn = e.target.closest("button");
+  if (!btn) { confirmId = null; renderCatalogs(); return; }
+  const id = btn.dataset.id, act = btn.dataset.act;
+  try {
+    if (act === "open") {
+      const r = await post(`/api/catalogs/${id}/open`);
+      location.href = r.url;
+    } else if (act === "refresh") {
+      confirmId = null; renderCatalogs();
+      startJob(await post(`/api/catalogs/${id}/refresh`), false);
+    } else if (act === "del") {
+      confirmId = id; renderCatalogs();
+    } else if (act === "cancel") {
+      confirmId = null; renderCatalogs();
+    } else if (act === "confirm") {
+      await api(`/api/catalogs/${id}`, {method: "DELETE"});
+      confirmId = null;
+      await loadCatalogs();
+    }
+  } catch (err) { alert(err.message); }
+});
+document.addEventListener("click", (e) => {
+  if (confirmId && !e.target.closest(".catalog")) {
+    confirmId = null; renderCatalogs();
+  }
+});
+
+async function loadCatalogs() {
+  catalogs = await api("/api/catalogs");
+  renderCatalogs();
+}
+
+function startJob(job, isNew) {
+  activeJob = {...job, isNew};
+  $("#job").style.display = "block";
+  $("#start").disabled = true;
+  pollJob();
+}
+async function pollJob() {
+  if (!activeJob) return;
+  try {
+    const j = await api("/api/jobs/" + activeJob.id);
+    const pct = j.total ? Math.round(100 * j.done / j.total) : 0;
+    $("#jobfill").style.width = (j.phase === "scanning" ? pct : 100) + "%";
+    $("#jobtext").textContent =
+      j.status === "error" ? "" :
+      `${j.phase} — ${j.done}/${j.total} files${j.current ? " — " + j.current : ""}`;
+    if (j.status === "done") {
+      const wasNew = activeJob.isNew, cid = j.catalog_id;
+      activeJob = null;
+      $("#start").disabled = false;
+      $("#jobtext").innerHTML = '<span class="ok">Done.</span>';
+      await loadCatalogs();
+      if (wasNew && cid) {
+        const r = await post(`/api/catalogs/${cid}/open`);
+        location.href = r.url;
+      }
+      return;
+    }
+    if (j.status === "error") {
+      $("#jobtext").innerHTML =
+        `<span class="error">Scan failed: ${escapeHtml(j.message || "")}</span>`;
+      activeJob = null;
+      $("#start").disabled = false;
+      await loadCatalogs();
+      return;
+    }
+  } catch (e) { /* transient; keep polling */ }
+  setTimeout(pollJob, 600);
+}
+
+$("#browse").addEventListener("click", async () => {
+  try {
+    const r = await post("/api/browse");
+    if (r.path) $("#path").value = r.path;   // cancelled = just nothing
+  } catch (e) { /* no desktop dialog available; typing still works */ }
+});
+$("#start").addEventListener("click", async () => {
+  const path = $("#path").value.trim();
+  if (!path) { alert("Enter a folder path (or use Browse…)."); return; }
+  try {
+    startJob(await post("/api/scan", {
+      path, use_llm: $("#use-llm").checked }), true);
+  } catch (err) { alert(err.message); }
+});
+
+async function loadSettings() {
+  const s = await api("/api/settings");
+  $("#s-provider").value = s.llm_provider || "ollama";
+  $("#s-model").value = s.llm_model || "";
+  $("#s-base").value = s.llm_base_url || "";
+  $("#s-key").placeholder = s.llm_api_key_set ? "•••••••• (saved)" : "(not set)";
+  $("#s-usellm").checked = !!s.use_llm;
+  $("#use-llm").checked = !!s.use_llm;
+}
+$("#s-save").addEventListener("click", async () => {
+  try {
+    const s = await post("/api/settings", {
+      llm_provider: $("#s-provider").value,
+      llm_model: $("#s-model").value.trim(),
+      llm_base_url: $("#s-base").value.trim(),
+      llm_api_key: $("#s-key").value,
+      use_llm: $("#s-usellm").checked,
+    });
+    $("#s-key").value = "";
+    $("#s-key").placeholder = s.llm_api_key_set ? "•••••••• (saved)" : "(not set)";
+    $("#s-note").textContent = "Saved.";
+    setTimeout(() => $("#s-note").textContent = "", 2500);
+  } catch (err) { alert(err.message); }
+});
+
+(async () => { await loadSettings(); await loadCatalogs(); })();
+</script>
+</body>
+</html>

@@ -51,23 +51,6 @@ def _run_server(folder: Path, db_path: Path, use_llm: bool, host: str,
     return 0
 
 
-def _pick_folder() -> Path | None:
-    """Native folder picker (stdlib tkinter); None if unavailable/cancelled."""
-    try:
-        import tkinter
-        from tkinter import filedialog
-    except Exception:
-        return None
-    try:
-        root = tkinter.Tk()
-        root.withdraw()
-        chosen = filedialog.askdirectory(title="Choose a folder for FolderLake")
-        root.destroy()
-    except Exception:
-        return None
-    return Path(chosen) if chosen else None
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="folderlake")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -105,11 +88,10 @@ def main(argv: list[str] | None = None) -> int:
                           help="output file (default: <folder>/folderlake.cypher)")
 
     p_app = sub.add_parser(
-        "app", help="no-shell mode: pick a folder in a dialog, open the viewer")
-    p_app.add_argument("--llm", action="store_true",
-                       help="use the configured LLM provider for topics")
-    p_app.add_argument("--port", type=int, default=0,
-                       help="port to listen on (0 = pick a free port)")
+        "app", help="web-app mode: open the FolderLake home page "
+                    "(history, new scans, settings) in your browser")
+    p_app.add_argument("--port", type=int, default=8770,
+                       help="port to listen on (default 8770)")
     p_app.add_argument("--host", default="127.0.0.1")
 
     p_mcp = sub.add_parser(
@@ -216,16 +198,9 @@ def main(argv: list[str] | None = None) -> int:
         return mcp_main(["--db", str(db_path)])
 
     if args.cmd == "app":
-        folder = _pick_folder()
-        if folder is None:
-            print(
-                "No folder chosen (or no desktop available for the picker). "
-                "Fallback: folderlake serve <folder>",
-                file=sys.stderr,
-            )
-            return 2
-        return _run_server(folder, _default_db(folder), args.llm, args.host,
-                           args.port, True)
+        from .appserver import run_app
+
+        return run_app(args.host, args.port, open_browser=True)
 
     return 0
 

@@ -193,7 +193,16 @@ def test_litellm_failure_falls_back_to_builtin(monkeypatch):
     assert http["url"] == "http://localhost:11434/api/generate"
 
 
-def test_app_without_folder_returns_2(monkeypatch, capsys):
-    monkeypatch.setattr("folderlake.cli._pick_folder", lambda: None)
-    assert cli_main(["app"]) == 2
-    assert "serve" in capsys.readouterr().err
+def test_app_starts_home_server(monkeypatch):
+    # v0.2: `app` no longer picks a folder and errors out — it starts
+    # the home web app (history / new scan / settings) immediately.
+    calls = {}
+
+    def fake_run_app(host, port, open_browser=True):
+        calls.update(host=host, port=port, open_browser=open_browser)
+        return 0
+
+    monkeypatch.setattr("folderlake.appserver.run_app", fake_run_app)
+    assert cli_main(["app", "--port", "8791"]) == 0
+    assert calls == {"host": "127.0.0.1", "port": 8791,
+                     "open_browser": True}

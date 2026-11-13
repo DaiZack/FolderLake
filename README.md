@@ -53,13 +53,24 @@ of shared topics, shared entities and explicit filename references.
 ## Quick start
 
 ```bash
-pip install folderlake            # or: pip install -e . from a clone
+pip install "git+https://github.com/DaiZack/FolderLake"
+# (not on PyPI yet — GitHub is the source; or `pip install -e .` from a clone)
 
-folderlake app                    # pick a folder, it opens in your browser
+folderlake app                    # opens the FolderLake home page
 ```
 
-That's the whole setup. `app` shows a native folder picker, scans the
-folder, and opens the viewer: filters and the topic tree on the left,
+![The FolderLake home page: history, new scans and settings](docs/screenshots/home.png)
+
+That's the whole setup. `app` opens a home page in your browser right
+away — no dialog, no waiting. Paste or browse to a folder, hit
+**Scan folder**, and watch the progress bar; when the scan finishes
+the catalog opens. Every catalog you build is remembered on the home
+page (stored in a small SQLite registry in `~/.folderlake/`): reopen
+one in a click, **Refresh** it to pick up added/removed files, or
+**Delete** it. Each history entry shows the settings it was scanned
+with. Inside a catalog, a **← FolderLake Home** link brings you back.
+
+The catalog viewer itself: filters and the topic tree on the left,
 the file list and the relationship graph side by side in the middle
 (on a phone they take turns, graph first), and a preview pane on the
 right. Clicking a topic filters the list and the graph together.
@@ -83,10 +94,14 @@ alone, so re-running on a big folder is cheap.
 With no LLM configured you get rule-based TF-IDF phrase tags. Point
 FolderLake at any chat model and each new or changed file gets LLM tags,
 a one-sentence summary and key entities instead (results are cached by
-content hash, so each file is sent exactly once):
+content hash, so each file is sent exactly once). In the app, the
+home page's Settings card holds the same options — no environment
+variables needed; the environment variables below remain for the
+CLI and scripts:
 
 ```bash
-pip install "folderlake[llm]"     # adds LiteLLM as the transport
+pip install "folderlake[llm] @ git+https://github.com/DaiZack/FolderLake"
+#                                 (adds LiteLLM as the transport)
 
 # Local model via Ollama (default provider)
 FOLDERLAKE_LLM_MODEL=qwen3 folderlake scan ~/notes --llm
@@ -117,7 +132,7 @@ client (Claude Code, Cursor, your own agent) can ask questions about a
 catalog without opening files:
 
 ```bash
-pip install "folderlake[mcp]"
+pip install "folderlake[mcp] @ git+https://github.com/DaiZack/FolderLake"
 folderlake mcp ~/Documents/notes          # stdio MCP server
 # or the folderlake-mcp entry point
 ```
@@ -135,7 +150,8 @@ folderlake mcp ~/Documents/notes          # stdio MCP server
 | Viewer | One HTML file, vanilla JS + **Apache ECharts** 5.5.1 (vendored, the only JS dependency), served by stdlib `http.server`; responsive down to phone widths |
 | Graph export | Idempotent Neo4j Cypher (`MERGE` script) |
 | Agent access | Official `mcp` Python SDK (optional extra), stdio transport |
-| Tests | pytest — 55 tests covering extractors, topics, relations, hierarchy, server and MCP |
+| App state | SQLite registry (stdlib `sqlite3`) in `~/.folderlake/registry.sqlite3` — catalog history with per-scan settings snapshots, plus the user settings |
+| Tests | pytest — 59 tests covering extractors, topics, relations, hierarchy, server and MCP |
 
 ### The ML / NLP pipeline, briefly
 
@@ -235,7 +251,7 @@ better on a real machine; treat them as a floor):
 
 ```bash
 pip install -e ".[llm,mcp]"
-pytest                            # 55 tests
+pytest                            # 59 tests
 ```
 
 Demo data: see [Demo data](#demo-data) above.
