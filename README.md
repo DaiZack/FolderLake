@@ -17,7 +17,7 @@ machine.
 
 ## Live demo
 
-**[Open the demo](https://daizack.github.io/folderlake/)** — a real
+**[Open the demo](https://daizack.github.io/FolderLake/)** — a real
 FolderLake catalog of 191 public files (AG News, 20 Newsgroups, Wikipedia
 articles and the seaborn datasets), browsable in your browser.
 
