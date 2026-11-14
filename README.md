@@ -24,8 +24,21 @@ reformatted; the lake is the catalog.
 - **Fast** — 1,000 mixed files scan in ~13 s; rescans only touch new or
   changed files (~0.1 s when nothing changed).
 - **Light** — a 1,000-file catalog is ~1.6 MB on disk.
-- **Many formats** — txt, md, html, docx, pdf, csv, tsv, json, parquet,
-  xlsx and sqlite out of the box.
+- **Many formats** — documents and data files out of the box; the
+  full list is under *Supported file types* below.
+
+## Supported file types
+
+- **Documents** — `.txt`, `.md`, `.html` / `.htm`, `.docx`, `.pdf`
+- **Data files** — `.csv`, `.tsv`, `.json`, `.parquet`, `.xlsx`,
+  `.sqlite` / `.db`
+- **Video and audio** — *coming soon*: transcription-based topics
+  are planned; the extractor slot is already in the design.
+- **Code files** — *not planned*. Professional code-analysis tools
+  are plentiful; FolderLake deliberately focuses on non-code files.
+
+Any other file still appears in the catalog with its metadata, just
+without extracted topics.
 
 ## Live demo
 
