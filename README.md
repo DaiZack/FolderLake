@@ -14,6 +14,11 @@ and lays a queryable catalog over them — FolderLake applies that
 idea to an ordinary folder. Your files are never moved, copied or
 reformatted; the lake is the catalog.
 
+**Watch it in action (45 s)** — a live walkthrough of the app: scan a
+folder, filter by topic, open a data file's review, and install it.
+
+[![FolderLake live demo](https://img.youtube.com/vi/_V5jvjMjizg/maxresdefault.jpg)](https://www.youtube.com/watch?v=_V5jvjMjizg)
+
 - **LLM topics** — plug in a model (Ollama local, OpenAI, Anthropic,
   any OpenAI-compatible endpoint) for phrase tags and real summaries;
   a built-in TF-IDF tagger covers folders with no model configured.
